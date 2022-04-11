@@ -26,7 +26,9 @@ CREATE TABLE time_dim (
 	year INTEGER NOT NULL,
 	month INTEGER NOT NULL,
 	day INTEGER NOT NULL,
-	hour INTEGER NOT NULL
+	hour INTEGER NOT NULL,
+	day_of_week VARCHAR(20) NOT NULL,
+	week_of_year INTEGER NOT NULL
 );
 
 CREATE TABLE facts (

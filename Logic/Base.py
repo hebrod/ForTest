@@ -2,7 +2,9 @@ from flask import jsonify
 from Config import db
 from Models.Base import RegionDim, DataSourceDim, LocationDim, TimeDim, Facts
 from datetime import datetime
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
+from pandas import DataFrame
+import json
 
 def getFactId(idValues):
     factData = Facts.query.filter_by(region=idValues["region"],datasource=idValues["datasource"],origin=idValues["origin_coord"],destination=idValues["destination_coord"],time=idValues["datetime"])
@@ -40,6 +42,8 @@ def getDateTimeId(value):
     month = dateTimeValue.month
     day = dateTimeValue.day
     hour = dateTimeValue.hour
+    day_of_week = dateTimeValue.strftime("%A")
+    week_of_year = dateTimeValue.strftime("%V")
     dateTimeData = TimeDim.query.filter_by(year=year,month=month, day=day, hour=hour)
     if dateTimeData.count() == 0:
         time_entity = TimeDim()
@@ -47,6 +51,8 @@ def getDateTimeId(value):
         time_entity.month = month
         time_entity.day = day
         time_entity.hour = hour
+        time_entity.day_of_week = day_of_week
+        time_entity.week_of_year = int(week_of_year)
         db.session.add(time_entity)
         db.session.commit()
     dateTimeData = TimeDim.query.filter_by(year=year,month=month, day=day, hour=hour)[0]
@@ -94,8 +100,48 @@ def handleData(record):
         finalId = getFactId(idValues)
     return finalId
 
-def loadEvent(data):
+def loadEvents(data):
     result = ""
     for record in data:
         result = handleData(record)
     return jsonify({'finished': result})
+
+def getDataEventsByRegion(data):
+    if "region" in data:
+        value = data["region"]
+        statement = " select t.year, t.week_of_year, avg(f.events) avg_events from facts f "
+        statement += " inner join time_dim t on t.id = f.time "
+        statement += " inner join region_dim r on r.id = f.region "
+        statement += " where r.region = :value "
+        statement += " group by t.year, t.week_of_year "
+        stmt = text(statement)
+        result = db.session.execute(stmt, {"value": value})
+        df = DataFrame(result.fetchall())
+        if df.empty:
+            return jsonify({'Result': 'No Data found.'})
+        else:
+            df.columns = result.keys()
+            return json.dumps(json.loads(df.to_json(orient="records")))
+    if "rectangle" in data:
+        min_long = data["rectangle"]["min_longitude"]
+        min_lat = data["rectangle"]["min_latitude"]
+        max_long = data["rectangle"]["max_longitude"]
+        max_lat = data["rectangle"]["max_latitude"]
+        statement = " select t.year, t.week_of_year, avg(f.events) avg_events from facts f "
+        statement += " inner join time_dim t on t.id = f.time "
+        statement += " inner join location_dim lo on lo.id = f.origin "
+        statement += " inner join location_dim ld on ld.id = f.destination "
+        statement += " where ST_Intersects ( lo.location "
+        statement += " , ST_MakeEnvelope ( :min_long, :min_lat, :max_long, :max_lat, 4326)::geography(:type) ) "
+        statement += " or ST_Intersects ( ld.location "
+        statement += " , ST_MakeEnvelope ( :min_long, :min_lat, :max_long, :max_lat, 4326)::geography(:type) ) "
+        statement += " group by t.year, t.week_of_year "
+        stmt = text(statement)
+        result = db.session.execute(stmt, {"min_long": min_long, "min_lat": min_lat, "max_long": max_long, "max_lat":max_lat, "type":"POLYGON"})
+        df = DataFrame(result.fetchall())
+        if df.empty:
+            return jsonify({'Result': 'No Data found.'})
+        else:
+            df.columns = result.keys()
+            return json.dumps(json.loads(df.to_json(orient="records")))
+    return jsonify({'Result': 'No valid option.'})

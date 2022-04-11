@@ -1,0 +1,19 @@
+From the two most commonly appearing regions, which is the latest datasource?
+
+select d.datasource from facts f
+inner join (select region, sum(events) from facts
+group by region
+order by 2 limit 2) as r on r.region = f.region
+inner join datasource_dim d on d.id = f.datasource
+inner join time_dim t on t.id = f.time
+order by TO_TIMESTAMP(cast(t.year as varchar) || '-' || LPAD(cast(t.month as varchar),2,'0') 
+|| '-' || LPAD(cast(t.day as varchar),2,'0') || ' ' || 
+LPAD(cast(t.hour as varchar),2,'0') || ':00:00','YYYY-MM-DD HH24:MI:SS')
+limit 1
+
+What regions has the "cheap_mobile" datasource appeared in?
+
+select distinct r.region from facts f
+inner join datasource_dim d on d.id = f.datasource
+inner join region_dim r on r.id = f.region
+where d.datasource = 'cheap_mobile'

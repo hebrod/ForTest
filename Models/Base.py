@@ -24,6 +24,8 @@ class TimeDim(db.Model, SerializerMixin):
   month = db.Column(db.Integer())
   day = db.Column(db.Integer())
   hour = db.Column(db.Integer())
+  day_of_week = db.Column(db.String(20))
+  week_of_year = db.Column(db.Integer())
 
 class Facts(db.Model, SerializerMixin):
   __tablename__ = 'facts'
